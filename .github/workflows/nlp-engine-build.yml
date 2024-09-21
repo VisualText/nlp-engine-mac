@@ -43,8 +43,8 @@ jobs:
       run: find $RUNNER_WORKSPACE
       shell: bash
 
-    - name: rename nlpl.exe to nlp.exe
-      run: mv release-assets/nlpl.exe release-assets/nlp.exe
+    - name: rename nlpm.exe to nlp.exe
+      run: mv release-assets/nlpm.exe release-assets/nlp.exe
       
     - name: Unzip the nlpengine.zip
       run: |
