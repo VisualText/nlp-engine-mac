@@ -35,6 +35,9 @@ Learn more:
 | [libicuucm.a](libicuucm.a) | ICU common static library that `nlp.exe` is linked against. |
 | [data/rfb/](data/rfb/) | The default "rfb" analyzer data tree (specs/grammar passes used by the engine at runtime). |
 | [data/rfb/spec/](data/rfb/spec/) | NLP++ pass files (`*.nlp`) and `analyzer.seq` defining the default analyzer pipeline. |
+| [compile-libs/](compile-libs/) | Headers (`include/Api/`, `include/cs/`) and engine static libraries (`lib/lib{prim,kbm,consh,words,lite}.a` + ICU) used to link a compiled analyzer/KB into a `.dylib`. Populated by the workflow from upstream's `nlpengine-compile-libs-macos.zip`. |
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Compile an analyzer + KB into `<analyzer>/<name>.dylib`. |
+| [scripts/compile-kb.sh](scripts/compile-kb.sh) | Rebuild only the KB into `<analyzer>/<name>_kb.dylib`. |
 | [python/](python/) | A simple Python wrapper class for invoking `nlp.exe` from scripts. See [python/README.md](python/README.md). |
 | [.github/workflows/nlp-engine-build.yml](.github/workflows/nlp-engine-build.yml) | The GitHub Actions workflow that pulls the latest engine release. |
 
@@ -84,6 +87,31 @@ engine.analyzeInput("my-analyzer", "sample.txt", dev=True)
 
 For **production** use, prefer the native Python bindings in the [py-package-nlpengine](https://github.com/VisualText/py-package-nlpengine) repository, which avoids the subprocess round-trip.
 
+## Compiling an analyzer to a native dylib
+
+By default `nlp.exe` runs analyzers interpreted from their `.nlp` spec files. For faster startup and execution, an analyzer (and its KB) can be compiled to a native `.dylib` that `nlp.exe -COMPILED` loads at runtime. Two scripts in [scripts/](scripts/) drive this end-to-end:
+
+| Script | What it does | Output |
+|--------|--------------|--------|
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` to emit `<analyzer>/run/*.cpp` and `<analyzer>/kb/*.cpp`, generates a `CMakeLists.txt`, and links them against the `compile-libs/` headers and static libraries. | `<analyzer>/<analyzer-name>.dylib` |
+| [scripts/compile-kb.sh](scripts/compile-kb.sh) | Runs `nlp.exe -COMPILEKB` (KB only — leaves analyzer rules untouched) and builds just `<analyzer>/kb/*.cpp`. | `<analyzer>/<analyzer-name>_kb.dylib` |
+
+Prerequisites: `cmake` ≥ 3.16 and a recent Xcode Command Line Tools install (`xcode-select --install`).
+
+Usage:
+
+```bash
+# Compile the bundled rfb analyzer:
+./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt
+
+# Run the compiled analyzer:
+./nlp.exe -COMPILED -ANA data/rfb -WORK . data/rfb/input/text.txt
+```
+
+> **Architecture:** The bundled `nlp.exe` is built for Apple Silicon (`arm64`) only — the compile scripts set `CMAKE_OSX_ARCHITECTURES=arm64` to match. Intel Macs are not supported by upstream's macOS build.
+
+The compile-libs come from upstream — the workflow drops them into `compile-libs/{include,lib}/` alongside the runtime binary.
+
 ## How updates work
 
 This repository does not build the engine from source — it mirrors binaries from [VisualText/nlp-engine](https://github.com/VisualText/nlp-engine). The workflow at [.github/workflows/nlp-engine-build.yml](.github/workflows/nlp-engine-build.yml) does the following:
@@ -91,8 +119,8 @@ This repository does not build the engine from source — it mirrors binaries fr
 1. Triggers on `workflow_dispatch` (manual) or `repository_dispatch` of type `nlp-engine-release` (fired by the upstream repo when it cuts a release).
 2. Fetches the latest release metadata from `VisualText/nlp-engine` via the GitHub API.
 3. Skips the run if a matching tag already exists locally (unless manually dispatched).
-4. Downloads four release assets: `nlpengine.zip` (the analyzer data tree), `libicutum.a`, `libicuucm.a`, and `nlpm.exe`.
-5. Renames `nlpm.exe` → `nlp.exe`, unzips `nlpengine.zip` into `data/`, and removes any previous binaries to avoid stale diffs.
+4. Downloads release assets: `nlpengine.zip` (the analyzer data tree), `libicutum.a`, `libicuucm.a`, `nlpm.exe`, and `nlpengine-compile-libs-macos.zip` (headers + engine static libraries for the compile scripts; optional — skipped if absent on a given release).
+5. Renames `nlpm.exe` → `nlp.exe`, unzips `nlpengine.zip` into `data/`, extracts `nlpengine-compile-libs-macos.zip` to `compile-libs/`, and removes any previous binaries to avoid stale diffs.
 6. Commits the new files, tags the commit with the upstream release tag, and creates a matching GitHub release here.
 
 This keeps the macOS distribution in lock-step with engine versions on Linux and Windows.
