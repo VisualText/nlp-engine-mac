@@ -131,17 +131,6 @@ jobs:
           echo "No compile-libs zip downloaded — skipping extraction"
         fi
       shell: bash
-        
-        # List data directory before adding to git
-        echo "Data directory contents before git add:"
-        ls -la data/rfb/spec
-        
-        # Force git to recognize data directory changes
-        git add -f data/
-        
-        # Check if any changes were detected
-        echo "Git status for data directory:"
-        git status --porcelain data/
 
     - name: Debug before copy
       if: steps.check_tag.outputs.update_needed == 'true'
