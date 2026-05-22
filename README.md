@@ -36,8 +36,7 @@ Learn more:
 | [data/rfb/](data/rfb/) | The default "rfb" analyzer data tree (specs/grammar passes used by the engine at runtime). |
 | [data/rfb/spec/](data/rfb/spec/) | NLP++ pass files (`*.nlp`) and `analyzer.seq` defining the default analyzer pipeline. |
 | [compile-libs/](compile-libs/) | Headers (`include/Api/`, `include/cs/`) and engine static libraries (`lib/lib{prim,kbm,consh,words,lite}.a` + ICU) used to link a compiled analyzer/KB into a `.dylib`. Populated by the workflow from upstream's `nlpengine-compile-libs-macos.zip`. |
-| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Compile an analyzer + KB into `<analyzer>/<name>.dylib`. |
-| [scripts/compile-kb.sh](scripts/compile-kb.sh) | Rebuild only the KB into `<analyzer>/<name>_kb.dylib`. |
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Compile the analyzer's KB into `<analyzer>/bin/kb.dylib`. |
 | [python/](python/) | A simple Python wrapper class for invoking `nlp.exe` from scripts. See [python/README.md](python/README.md). |
 | [.github/workflows/nlp-engine-build.yml](.github/workflows/nlp-engine-build.yml) | The GitHub Actions workflow that pulls the latest engine release. |
 
@@ -87,30 +86,41 @@ engine.analyzeInput("my-analyzer", "sample.txt", dev=True)
 
 For **production** use, prefer the native Python bindings in the [py-package-nlpengine](https://github.com/VisualText/py-package-nlpengine) repository, which avoids the subprocess round-trip.
 
-## Compiling an analyzer to a native dylib
+## Compiling an analyzer's KB to a native dylib
 
-By default `nlp.exe` runs analyzers interpreted from their `.nlp` spec files. For faster startup and execution, an analyzer (and its KB) can be compiled to a native `.dylib` that `nlp.exe -COMPILED` loads at runtime. Two scripts in [scripts/](scripts/) drive this end-to-end:
+By default `nlp.exe` runs analyzers fully interpreted. With the new `EMBEDED_KB`-enabled engine, the **knowledge base** can be compiled to a native shared library that the engine `dlopen`s at `-COMPILED` time and calls into via a single exported `kb_setup` symbol. (Analyzer pass code itself is still interpreted — upstream removed `ana_gen` in 1999, so there is no compiled-rules path; the engine falls back to interpreted execution for the rules.)
 
 | Script | What it does | Output |
 |--------|--------------|--------|
-| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` to emit `<analyzer>/run/*.cpp` and `<analyzer>/kb/*.cpp`, generates a `CMakeLists.txt`, and links them against the `compile-libs/` headers and static libraries. | `<analyzer>/<analyzer-name>.dylib` |
-| [scripts/compile-kb.sh](scripts/compile-kb.sh) | Runs `nlp.exe -COMPILEKB` (KB only — leaves analyzer rules untouched) and builds just `<analyzer>/kb/*.cpp`. | `<analyzer>/<analyzer-name>_kb.dylib` |
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` (emits `Cc_code.cpp` plus the `Sym*.cpp` / `Con*.cpp` / `Ptr*.cpp` / `St*.cpp` tables under `<analyzer>/kb/`), generates a one-line `kb_setup()` shim, and links everything into a single SHARED library against `compile-libs/`. Only `kb_setup` is exported (`-fvisibility=hidden` everywhere else). | `<analyzer>/bin/kb.dylib` |
 
 Prerequisites: `cmake` ≥ 3.16 and a recent Xcode Command Line Tools install (`xcode-select --install`).
 
 Usage:
 
 ```bash
-# Compile the bundled rfb analyzer:
+# Compile the bundled rfb analyzer's KB:
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt
 
-# Run the compiled analyzer:
+# Run with the compiled KB (rules stay interpreted, KB is dlopen'd):
 ./nlp.exe -COMPILED -ANA data/rfb -WORK . data/rfb/input/text.txt
 ```
 
-> **Architecture:** The bundled `nlp.exe` is built for Apple Silicon (`arm64`) only — the compile scripts set `CMAKE_OSX_ARCHITECTURES=arm64` to match. Intel Macs are not supported by upstream's macOS build.
+What you should see in the `-COMPILED` output for a successful round-trip:
 
-The compile-libs come from upstream — the workflow drops them into `compile-libs/{include,lib}/` alongside the runtime binary.
+```
+[CG: Trying to load compiled KB.]
+[Loading compiled kb: data/rfb/bin/kb.dylib]
+[Loaded compiled kb library]
+[Loading compiled analyzer ...]
+[Error: Couldn't load compiled analyzer.]      # expected — no run.dylib exists
+[No compiled analyzer; falling back to interpreted.]
+... normal parse output ...
+```
+
+> **Architecture:** The bundled `nlp.exe` is built for Apple Silicon (`arm64`) only — the compile script sets `CMAKE_OSX_ARCHITECTURES=arm64` to match. Intel Macs are not supported by upstream's macOS build.
+
+The compile-libs come from upstream's `nlpengine-compile-libs-macos.zip` — the release workflow drops them into `compile-libs/{include,lib}/` alongside the runtime binary.
 
 ## How updates work
 
