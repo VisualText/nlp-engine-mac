@@ -102,8 +102,44 @@ else
   SRC_GLOB="run|kb"
 fi
 
+# The engine's analyzer-pass codegen (lite/nlp.cpp make_analyzer) opens
+# run/<pass>.cpp via std::ofstream WITHOUT creating the directory first.
+# If run/ is absent the ofstreams silently no-op, so -COMPILE emits only
+# the kb/ trees and the staged run.dylib ends up with no run_analyzer
+# symbol — at runtime load_compiled() still succeeds (the lib loads and
+# kb_setup resolves), so -COMPILED skips the interpreted fallback and
+# dispatches into a null run_analyzer, yielding an empty final tree and no
+# per-pass dumps. Pre-create the output dirs so the trees actually land.
+mkdir -p "$ANALYZER_DIR/kb"
+if [ "$KB_ONLY" != "true" ]; then
+  mkdir -p "$ANALYZER_DIR/run"
+fi
+
 echo "==> [1/3] nlp.exe $COMPILE_FLAG  (emits .cpp trees under $ANALYZER_DIR/{$SRC_GLOB}/)"
 "$NLP_EXE" "$COMPILE_FLAG" -ANA "$ANALYZER_DIR" -WORK "$REPO_ROOT" "$INPUT_FILE"
+
+# Fail loudly if the analyzer-pass codegen produced nothing. The CMake GLOB
+# below also matches kb/*.cpp, so a run/ with no .cpp files would still build
+# a (kb-only) library without run_analyzer and silently regress to an empty
+# final tree at runtime. The usual cause is a missing RFB (data/rfb/) — the
+# engine's Angen pass, which emits run/pass*.cpp, lives in the RFB; without it
+# the engine prints "[No RFB.  Using the RFA for parsing rules.]" and only
+# dispatcher scaffolding is generated. Catch it here instead of at runtime.
+if [ "$KB_ONLY" != "true" ]; then
+  # run/analyzer.cpp (the run_analyzer dispatcher) is always emitted, but it
+  # calls patExecute<N>() whose bodies live in run/pass*.cpp — and those are
+  # produced by the RFB's Angen pass. Check for the pass bodies specifically;
+  # the dispatcher alone links to nothing and fails the C++ build with cryptic
+  # "undeclared identifier patExecute9" errors.
+  if ! ls "$ANALYZER_DIR"/run/pass*.cpp >/dev/null 2>&1; then
+    echo "ERROR: $COMPILE_FLAG produced no run/pass*.cpp (analyzer-pass code)." >&2
+    echo "       The compiled analyzer would have no pass bodies for run_analyzer." >&2
+    echo "       Usual cause: missing RFB at $REPO_ROOT/data/rfb/ (the engine prints" >&2
+    echo "       '[No RFB.  Using the RFA for parsing rules.]'). Restore it with" >&2
+    echo "       'git checkout -- data/rfb' if it was deleted." >&2
+    exit 1
+  fi
+fi
 
 BUILD_ROOT="$ANALYZER_DIR/.nlp-compile"
 SRC_DIR="$BUILD_ROOT/src"
