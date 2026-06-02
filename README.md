@@ -81,7 +81,7 @@ from python.nlpengine import NLPEngine
 
 engine = NLPEngine(engineDir="/path/to/nlp-engine-mac",
                    analyzersDir="/path/to/my/analyzers")
-engine.analyzeInput("my-analyzer", "sample.txt", dev=True)
+engine.analyzeFile("my-analyzer", "sample.txt", dev=True)
 ```
 
 For **production** use, prefer the native Python bindings in the [py-package-nlpengine](https://github.com/VisualText/py-package-nlpengine) repository, which avoids the subprocess round-trip.
