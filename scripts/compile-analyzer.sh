@@ -56,14 +56,17 @@
 
 set -euo pipefail
 
-KB_ONLY=false
-while [ "${1:-}" = "--kb-only" ]; do
-  KB_ONLY=true
+MODE="full"
+while [ "${1:-}" = "--kb-only" ] || [ "${1:-}" = "--analyzer-only" ]; do
+  case "$1" in
+    --kb-only)       MODE="kb" ;;
+    --analyzer-only) MODE="ana" ;;
+  esac
   shift
 done
 
 if [ "$#" -lt 2 ]; then
-  echo "Usage: $0 [--kb-only] <analyzer-dir> <input-file>" >&2
+  echo "Usage: $0 [--kb-only|--analyzer-only] <analyzer-dir> <input-file>" >&2
   exit 64
 fi
 
@@ -92,15 +95,23 @@ fi
 
 export DYLD_LIBRARY_PATH="$REPO_ROOT:${DYLD_LIBRARY_PATH:-}"
 
-if [ "$KB_ONLY" = "true" ]; then
-  COMPILE_FLAG="-COMPILEKB"
-  TARGET_NAME="nlp_kb"
-  SRC_GLOB="kb"
-else
-  COMPILE_FLAG="-COMPILE"
-  TARGET_NAME="nlp_analyzer"
-  SRC_GLOB="run|kb"
-fi
+case "$MODE" in
+  kb)
+    COMPILE_FLAG="-COMPILEKB"
+    TARGET_NAME="nlp_kb"
+    SRC_GLOB="kb"
+    ;;
+  ana)
+    COMPILE_FLAG="-COMPILEANA"
+    TARGET_NAME="nlp_run"
+    SRC_GLOB="run"
+    ;;
+  *)
+    COMPILE_FLAG="-COMPILE"
+    TARGET_NAME="nlp_analyzer"
+    SRC_GLOB="run|kb"
+    ;;
+esac
 
 # The engine's analyzer-pass codegen (lite/nlp.cpp make_analyzer) opens
 # run/<pass>.cpp via std::ofstream WITHOUT creating the directory first.
@@ -158,11 +169,11 @@ EOF
 # sensitive. ICU is handled via per-archive -force_load below.
 ENGINE_LIB_NAMES="prim kbm consh words lite"
 
-if [ "$KB_ONLY" = "true" ]; then
-  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/kb/*.cpp\")"
-else
-  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\" \"$ANALYZER_DIR/kb/*.cpp\")"
-fi
+case "$MODE" in
+  kb)  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/kb/*.cpp\")" ;;
+  ana) GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\")" ;;
+  *)   GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\" \"$ANALYZER_DIR/kb/*.cpp\")" ;;
+esac
 
 echo "==> [2/3] Generate CMakeLists.txt"
 cat > "$SRC_DIR/CMakeLists.txt" <<EOF
@@ -237,17 +248,25 @@ fi
 # for. The "u" variants are the UNICODE build flavour; copying them
 # keeps both engine flavours happy without a rebuild.
 echo "==> Staging $(basename "$OUT") into $ANALYZER_DIR/bin/"
-if [ "$KB_ONLY" = "true" ]; then
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kb.dylib"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.dylib"
-  STAGED="bin/kb.dylib bin/kbu.dylib"
-else
-  cp -f "$OUT" "$ANALYZER_DIR/bin/run.dylib"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/runu.dylib"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kb.dylib"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.dylib"
-  STAGED="bin/run.dylib bin/runu.dylib bin/kb.dylib bin/kbu.dylib"
-fi
+case "$MODE" in
+  kb)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kb.dylib"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.dylib"
+    STAGED="bin/kb.dylib bin/kbu.dylib"
+    ;;
+  ana)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/run.dylib"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/runu.dylib"
+    STAGED="bin/run.dylib bin/runu.dylib"
+    ;;
+  *)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/run.dylib"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/runu.dylib"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kb.dylib"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.dylib"
+    STAGED="bin/run.dylib bin/runu.dylib bin/kb.dylib bin/kbu.dylib"
+    ;;
+esac
 
 echo
 echo "Built: $OUT"

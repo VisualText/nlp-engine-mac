@@ -95,9 +95,13 @@ shared libraries that the engine `dlopen`s at runtime — the analyzer
 runs entirely from compiled code, so source edits to `.nlp` files
 between runs don't affect the output until you recompile.
 
-| Script | What it does | Output |
-|--------|--------------|--------|
-| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` (emits the analyzer C++ trees under `<analyzer>/run/` and `<analyzer>/kb/`), then links everything into a single SHARED library against `compile-libs/`. The library exports both `run_analyzer(Parse*)` and `kb_setup(void*)` (engine codegen emits both). | `<analyzer>/bin/run.dylib`<br>`<analyzer>/bin/runu.dylib`<br>`<analyzer>/bin/kb.dylib`<br>`<analyzer>/bin/kbu.dylib` |
+| Mode | Flag | What it does | Output |
+|------|------|--------------|--------|
+| Full (default) | `-COMPILE` | Runs `nlp.exe -COMPILE` (emits the analyzer C++ trees under `<analyzer>/run/` and `<analyzer>/kb/`), then links everything into a single SHARED library against `compile-libs/`. The library exports both `run_analyzer(Parse*)` and `kb_setup(void*)` (engine codegen emits both). | `<analyzer>/bin/run.dylib`<br>`<analyzer>/bin/runu.dylib`<br>`<analyzer>/bin/kb.dylib`<br>`<analyzer>/bin/kbu.dylib` |
+| KB only | `--kb-only` (`-COMPILEKB`) | Compiles only the knowledge base. Use when only the KB changed. | `<analyzer>/bin/kb.dylib`<br>`<analyzer>/bin/kbu.dylib` |
+| Analyzer only | `--analyzer-only` (`-COMPILEANA`) | Compiles only the analyzer rules, leaving any existing `kb.dylib` in place. Use when only the rules changed and the KB is already compiled. | `<analyzer>/bin/run.dylib`<br>`<analyzer>/bin/runu.dylib` |
+
+[scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) drives all three modes.
 
 The same library is staged under all four filenames so the engine's
 load paths find it whether it's looking for the ANSI or UNICODE
@@ -111,8 +115,12 @@ Usage:
 # Default: full-analyzer compile (run + kb):
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt
 
-# Legacy: KB-only compile (matches the pre-NLP-ENGINE-MAC-008 behaviour):
+# KB-only compile (-COMPILEKB): rebuild just kb.dylib / kbu.dylib:
 ./scripts/compile-analyzer.sh --kb-only data/rfb data/rfb/input/text.txt
+
+# Analyzer-only compile (-COMPILEANA): rebuild just run.dylib / runu.dylib,
+# leaving the existing kb.dylib in place. Use when only the rules changed:
+./scripts/compile-analyzer.sh --analyzer-only data/rfb data/rfb/input/text.txt
 
 # Run with the compiled artifacts:
 ./nlp.exe -COMPILED -ANA data/rfb -WORK . data/rfb/input/text.txt
