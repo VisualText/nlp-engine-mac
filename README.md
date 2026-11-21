@@ -17,7 +17,7 @@ The NLP Engine is distributed per platform. Pick the one that matches your OS:
 | Linux    | [VisualText/nlp-engine-linux](https://github.com/VisualText/nlp-engine-linux) |
 | Source   | [VisualText/nlp-engine](https://github.com/VisualText/nlp-engine) |
 
-For production use from Python, prefer the [NLPPlus Python package](https://github.com/VisualText/py-package-nlpengine) instead of the simple wrapper shipped here.
+For production use from Python, prefer the [NLPPlus Python package](https://pypi.org/project/NLPPlus/) instead of the simple wrapper shipped here.
 
 ## What is NLP++?
 
@@ -86,7 +86,7 @@ engine = NLPEngine(engineDir="/path/to/nlp-engine-mac",
 engine.analyzeFile("my-analyzer", "sample.txt", dev=True)
 ```
 
-For **production** use, prefer the native Python bindings in the [py-package-nlpengine](https://github.com/VisualText/py-package-nlpengine) repository, which avoids the subprocess round-trip.
+For **production** use, prefer the native bindings in the [NLPPlus Python package](https://pypi.org/project/NLPPlus/), which avoids the subprocess round-trip.
 
 ## Compiling an analyzer to native dylibs
 
