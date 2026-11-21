@@ -1,5 +1,7 @@
 # NLP Engine for macOS
 
+[![PyPI: NLPPlus](https://img.shields.io/pypi/v/NLPPlus?label=PyPI%20NLPPlus&logo=pypi&logoColor=white)](https://pypi.org/project/NLPPlus/) [![npm: nlpplus](https://img.shields.io/npm/v/nlpplus?label=npm%20nlpplus&logo=npm)](https://www.npmjs.com/package/nlpplus)
+
 This repository packages the **NLP Engine** — the command-line runtime for the [NLP++](https://github.com/VisualText/nlp-engine) language — built for macOS. It bundles the `nlp.exe` executable, the ICU static libraries it links against, the default `rfb` analyzer data tree, and a small Python wrapper for invoking the engine from scripts.
 
 The binaries here are produced from the [VisualText/nlp-engine](https://github.com/VisualText/nlp-engine) source repository and kept in sync automatically by a GitHub Actions workflow that downloads each new upstream release.
